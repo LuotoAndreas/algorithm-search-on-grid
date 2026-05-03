@@ -194,7 +194,10 @@ class SimulationMetrics:
 
         print("\nDynaaminen muutos")
         print(f"- Este lisätty: {self.dynamic_obstacle_added}")
-        print(f"- Esteen sijainti: {self.dynamic_obstacle_position}")
+        print(f"- Viimeisin esteen sijainti: {self.dynamic_obstacle_position}")
+        print(f"- Lisättyjen esteiden määrä: {len(self.dynamic_obstacle_positions)}")
+        print(f"- Kaikki lisätyt esteet: {self.dynamic_obstacle_positions}")
+        print(f"- Uudelleenreitityksen aiheuttaneet esteet: {self.effective_obstacle_positions}")
 
         print("\nUudelleenreititys")
         print(f"- Uudelleenreititysten määrä: {self.reroute_count}")
