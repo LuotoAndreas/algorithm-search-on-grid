@@ -1,0 +1,27 @@
+# Ruudukon asetukset
+GRID_ROWS = 30
+GRID_COLS = 30
+CELL_SIZE = 20
+
+# Ikkunan koko
+WINDOW_WIDTH = GRID_COLS * CELL_SIZE
+WINDOW_HEIGHT = GRID_ROWS * CELL_SIZE
+
+# Värit RGB-muodossa
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
+LIGHT_GRAY = (220, 220, 220)
+DARK_GRAY = (80, 80, 80)
+
+GREEN = (0, 180, 0)
+RED = (220, 0, 0)
+BLUE = (40, 100, 220)
+YELLOW = (240, 220, 80)
+ORANGE = (255, 150, 0)
+
+# Visualisoinnin asetukset
+VISITED_ANIMATION_DELAY_MS = 10
+PATH_ANIMATION_DELAY_MS = 20
+
+# Ajoneuvon visualisointi
+VEHICLE_MOVE_DELAY_MS = 150
