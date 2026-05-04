@@ -520,6 +520,7 @@ def main():
     print("A = valitse A*")
     print("L = valitse D* Lite")
     print("C = tyhjennä ruudukko")
+    print("P = generoi satunnaiset esteet")
     print("Välilyönti = suorita valittu algoritmi")
     print("Enter = aloita ajo")
     print("Ajon aikana vasen klikkaus = lisää dynaaminen este")
@@ -626,7 +627,6 @@ def main():
                     visited = []
                     vehicle_position = None
                     last_result = None
-
                     print("\nValittu algoritmi: Dijkstra")
 
                 elif event.key == pygame.K_a:
@@ -637,7 +637,6 @@ def main():
                     visited = []
                     vehicle_position = None
                     last_result = None
-
                     print("\nValittu algoritmi: A*")
 
                 elif event.key == pygame.K_l:
@@ -648,7 +647,6 @@ def main():
                     visited = []
                     vehicle_position = None
                     last_result = None
-
                     print("\nValittu algoritmi: D* Lite")
 
                 elif event.key == pygame.K_c:
@@ -659,8 +657,19 @@ def main():
                     visited = []
                     vehicle_position = None
                     last_result = None
-
                     print("\nRuudukko tyhjennetty.")
+
+                elif event.key == pygame.K_p:
+                    grid.generate_random_obstacles()
+                    placement_mode = None
+
+                    path = []
+                    visited = []
+                    vehicle_position = None
+                    last_result = None
+
+                    print("\nSatunnaiset esteet generoitu.")
+                    print(f"Esteiden määrä: {len(grid.obstacles)}")
 
                 elif event.key == pygame.K_SPACE:
                     placement_mode = None

@@ -25,3 +25,7 @@ PATH_ANIMATION_DELAY_MS = 20
 
 # Ajoneuvon visualisointi
 VEHICLE_MOVE_DELAY_MS = 150
+
+# Satunnaisten esteiden asetukset
+RANDOM_OBSTACLE_PROBABILITY = 0.20
+RANDOM_SEED = 123

@@ -1,5 +1,5 @@
-from config import GRID_ROWS, GRID_COLS
-
+from config import GRID_ROWS, GRID_COLS, RANDOM_OBSTACLE_PROBABILITY, RANDOM_SEED
+import random
 
 class Grid:
     """
@@ -18,6 +18,27 @@ class Grid:
         self.obstacles = set()
         self.start = None
         self.goal = None
+
+    def generate_random_obstacles(self):
+        """
+        Generoi satunnaiset esteet ruudukkoon.
+
+        Lähtöpisteen ja kohdepisteen päälle ei lisätä esteitä.
+        Sama RANDOM_SEED tuottaa saman esteasetelman.
+        """
+        random.seed(RANDOM_SEED)
+
+        self.obstacles.clear()
+
+        for row in range(self.rows):
+            for col in range(self.cols):
+                position = (row, col)
+
+                if position == self.start or position == self.goal:
+                    continue
+
+                if random.random() < RANDOM_OBSTACLE_PROBABILITY:
+                    self.obstacles.add(position)
 
     def in_bounds(self, row, col):
         """
