@@ -17,6 +17,7 @@ env/
 
 # Tulostiedostot / simulaation ajotulokset
 results.csv
+experiment_results.csv
 *.log
 
 # Käyttöjärjestelmän tiedostot
