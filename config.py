@@ -1,4 +1,4 @@
-# Ruudukon asetukset
+# Ruudukon koon asetukset
 GRID_ROWS = 60
 GRID_COLS = 60
 CELL_SIZE = 10

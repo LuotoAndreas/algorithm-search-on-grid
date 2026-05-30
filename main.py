@@ -33,15 +33,18 @@ def mouse_position_to_cell(mouse_pos):
     että hiiren sijainti on ruudukkoalueella.
     """
     x, y = mouse_pos
-    row = y // CELL_SIZE
-    col = x // CELL_SIZE
+    row = (y - GRID_OFFSET_Y) // CELL_SIZE
+    col = (x - GRID_OFFSET_X) // CELL_SIZE
     return row, col
 
 
 def is_inside_grid_area(mouse_pos):
     """Palauttaa True, jos hiiren sijainti on varsinaisella ruudukkoalueella."""
     x, y = mouse_pos
-    return 0 <= x < WINDOW_WIDTH and 0 <= y < WINDOW_HEIGHT
+    return (
+        GRID_OFFSET_X <= x < GRID_OFFSET_X + WINDOW_WIDTH
+        and GRID_OFFSET_Y <= y < GRID_OFFSET_Y + WINDOW_HEIGHT
+    )
 
 
 def algorithm_display_name(selected_algorithm):
@@ -63,25 +66,116 @@ def next_click_display_name(placement_mode):
     return names.get(placement_mode, "piirtää esteen")
 
 
-# Ruudukon alapuolelle varattu käyttöliittymäpaneeli.
-# Korkeus riittää ohjeteksteille ja kahdelle painikeriville.
-PANEL_HEIGHT = 184
-GUIDE_HEIGHT = 88
+# Sivupaneelit: ohjeet vasemmalla, painikkeet oikealla.
+# Näin ruudukko saa koko ikkunan korkeuden käyttöönsä.
+LEFT_PANEL_WIDTH = 280
+RIGHT_PANEL_WIDTH = 270
+SIDE_PANEL_MARGIN = 10
+PANEL_HEIGHT = 0
+GUIDE_HEIGHT = 0
 BUTTON_WIDTH = 112
 BUTTON_HEIGHT = 28
-BUTTON_MARGIN = 6
-DISABLED_BUTTON_COLOR = (150, 150, 150)
-DISABLED_TEXT_COLOR = (90, 90, 90)
+BUTTON_MARGIN = 8
+QUIT_KEY = pygame.K_q
+
+PANEL_BG = (38, 42, 48)
+CARD_BG = (54, 60, 68)
+ACTIVE_BUTTON_COLOR = (255, 210, 90)
+PRIMARY_BUTTON_COLOR = (110, 170, 255)
+QUIT_BUTTON_COLOR = (220, 95, 95)
+DISABLED_BUTTON_COLOR = (120, 124, 130)
+DISABLED_TEXT_COLOR = (75, 78, 82)
+HELP_TEXT_COLOR = (225, 225, 225)
+MUTED_TEXT_COLOR = (188, 194, 202)
 AUTO_OBSTACLE_COLOR = (160, 80, 200)
 AUTO_OBSTACLE_MIN = 0
 AUTO_OBSTACLE_MAX = 10
 AUTO_OBSTACLE_DECREASE_KEY = pygame.K_MINUS
 AUTO_OBSTACLE_INCREASE_KEY = pygame.K_EQUALS
 
+# Nämä arvot päivitetään käynnistyksessä ja ikkunan koon muuttuessa.
+# Näin ruudukko skaalautuu näytölle eikä mene ikkunan ulkopuolelle.
+SCREEN_WIDTH = WINDOW_WIDTH
+SCREEN_HEIGHT = WINDOW_HEIGHT
+GRID_OFFSET_X = 0
+GRID_OFFSET_Y = 0
+MIN_CELL_SIZE = 1
+MAX_CELL_SIZE = 40
+
+
+def update_layout_for_screen(screen_width, screen_height, grid):
+    """
+    Laskee ruudukolle sopivan solukoon nykyisen ikkunan koon perusteella.
+
+    Ruudukolle varataan tila ikkunan yläosasta ja käyttöliittymäpaneeli pidetään
+    näkyvissä ikkunan alaosassa. Jos ruudukko on suuri, solukokoa pienennetään
+    automaattisesti niin, että koko ruudukko mahtuu näkyviin.
+    """
+    global SCREEN_WIDTH, SCREEN_HEIGHT, WINDOW_WIDTH, WINDOW_HEIGHT, CELL_SIZE
+    global GRID_OFFSET_X, GRID_OFFSET_Y
+
+    SCREEN_WIDTH = max(320, int(screen_width))
+    SCREEN_HEIGHT = max(320, int(screen_height))
+
+    side_panels_width = LEFT_PANEL_WIDTH + RIGHT_PANEL_WIDTH + SIDE_PANEL_MARGIN * 2
+    available_grid_width = max(80, SCREEN_WIDTH - side_panels_width)
+    available_grid_height = max(80, SCREEN_HEIGHT - SIDE_PANEL_MARGIN * 2)
+
+    cell_by_width = max(1, available_grid_width // max(1, grid.cols))
+    cell_by_height = max(1, available_grid_height // max(1, grid.rows))
+    CELL_SIZE = max(MIN_CELL_SIZE, min(MAX_CELL_SIZE, cell_by_width, cell_by_height))
+
+    WINDOW_WIDTH = grid.cols * CELL_SIZE
+    WINDOW_HEIGHT = grid.rows * CELL_SIZE
+
+    grid_area_x = LEFT_PANEL_WIDTH + SIDE_PANEL_MARGIN
+    GRID_OFFSET_X = grid_area_x + max(0, (available_grid_width - WINDOW_WIDTH) // 2)
+    GRID_OFFSET_Y = SIDE_PANEL_MARGIN + max(0, (available_grid_height - WINDOW_HEIGHT) // 2)
+
+
+def recreate_layout(screen_width, screen_height, grid):
+    """Päivittää mitoituksen ja luo painikkeet uuteen ikkunakokoon."""
+    update_layout_for_screen(screen_width, screen_height, grid)
+    return create_ui_buttons()
+
+
+def create_window(screen_width, screen_height, fullscreen=False):
+    """Luo ohjelmaikkunan. Oletuksena käytetään normaalia muutettavaa ikkunaa."""
+    if fullscreen:
+        return pygame.display.set_mode((screen_width, screen_height), pygame.FULLSCREEN)
+
+    return pygame.display.set_mode((screen_width, screen_height), pygame.RESIZABLE)
+
+
+def clicked_quit_button(mouse_pos, buttons):
+    """Palauttaa True, jos käyttäjä klikkasi Sulje-painiketta."""
+    if buttons is None:
+        return False
+
+    for button in buttons:
+        if button.label == "Sulje" and button.is_clicked(mouse_pos):
+            return True
+
+    return False
+
+
+def should_quit_from_event(event, buttons=None):
+    """Tarkistaa sulkemisen myös animaatioiden aikana."""
+    if event.type == pygame.QUIT:
+        return True
+
+    if event.type == pygame.KEYDOWN and event.key == QUIT_KEY:
+        return True
+
+    if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+        return clicked_quit_button(pygame.mouse.get_pos(), buttons)
+
+    return False
+
 
 class Button:
     """Yksinkertainen Pygame-painike."""
-    def __init__(self, x, y, w, h, label, key=None, color=LIGHT_GRAY, hover_color=(200, 200, 200)):
+    def __init__(self, x, y, w, h, label, key=None, color=LIGHT_GRAY, hover_color=(220, 220, 220)):
         self.rect = pygame.Rect(x, y, w, h)
         self.label = label
         self.key = key
@@ -89,17 +183,39 @@ class Button:
         self.hover_color = hover_color
         self.hover = False
         self.enabled = True
+        self.active = False
+        self.primary = False
+        self.danger = False
 
     def draw(self, screen, font):
         if not self.enabled:
             color = DISABLED_BUTTON_COLOR
             text_color = DISABLED_TEXT_COLOR
+            border_color = (80, 82, 86)
+            border_width = 1
+        elif self.danger:
+            color = self._brighten(QUIT_BUTTON_COLOR, 18) if self.hover else QUIT_BUTTON_COLOR
+            text_color = WHITE
+            border_color = (120, 40, 40)
+            border_width = 1
+        elif self.active:
+            color = self._brighten(ACTIVE_BUTTON_COLOR, 20) if self.hover else ACTIVE_BUTTON_COLOR
+            text_color = BLACK
+            border_color = WHITE
+            border_width = 2
+        elif self.primary:
+            color = self._brighten(PRIMARY_BUTTON_COLOR, 18) if self.hover else PRIMARY_BUTTON_COLOR
+            text_color = WHITE
+            border_color = (55, 95, 150)
+            border_width = 1
         else:
             color = self.hover_color if self.hover else self.color
             text_color = BLACK
+            border_color = BLACK
+            border_width = 1
 
-        pygame.draw.rect(screen, color, self.rect)
-        pygame.draw.rect(screen, BLACK, self.rect, 1)
+        pygame.draw.rect(screen, color, self.rect, border_radius=6)
+        pygame.draw.rect(screen, border_color, self.rect, border_width, border_radius=6)
         txt = font.render(self.label, True, text_color)
         txt_r = txt.get_rect(center=self.rect.center)
         screen.blit(txt, txt_r)
@@ -110,42 +226,75 @@ class Button:
     def is_clicked(self, mouse_pos):
         return self.enabled and self.rect.collidepoint(mouse_pos)
 
+    @staticmethod
+    def _brighten(color, amount):
+        return tuple(min(255, value + amount) for value in color)
 
 def create_ui_buttons():
-    """Luo käyttöliittymäpaneelin painikkeet käyttöjärjestyksen mukaiseen järjestykseen."""
-    labels = [
-        ("1 Aseta lähtö", pygame.K_s),
-        ("2 Aseta maali", pygame.K_g),
-        ("3 Satunnaiset", pygame.K_p),
-        ("4 Dijkstra", pygame.K_d),
-        ("4 A*", pygame.K_a),
-        ("4 D* Lite", pygame.K_l),
-        ("Esteet -", AUTO_OBSTACLE_DECREASE_KEY),
-        ("Esteet +", AUTO_OBSTACLE_INCREASE_KEY),
-        ("5 Laske reitti", pygame.K_SPACE),
-        ("6 Aloita ajo", pygame.K_RETURN),
-        ("Tyhjennä", pygame.K_c),
+    """Luo painikkeet ruudukon oikealle puolelle ryhmiteltynä.
+
+    Ryhmien otsikoita ei piirretä käyttöliittymään. Ryhmien väliin jätetään
+    vain hieman enemmän pystysuuntaista tyhjää tilaa, jotta toiminnot
+    hahmottuvat paremmin.
+    """
+    button_groups = [
+        [
+            ("Lähtöpiste", pygame.K_s),
+            ("Maali", pygame.K_g),
+        ],
+        [
+            ("Satunnaisesteet", pygame.K_p),
+        ],
+        [
+            ("Dijkstra", pygame.K_d),
+            ("A*", pygame.K_a),
+            ("D* Lite", pygame.K_l),
+        ],
+        [
+            ("Dynaamiset -", AUTO_OBSTACLE_DECREASE_KEY),
+            ("Dynaamiset +", AUTO_OBSTACLE_INCREASE_KEY),
+        ],
+        [
+            ("Laske reitti", pygame.K_SPACE),
+            ("Aloita ajo", pygame.K_RETURN),
+        ],
+        [            
+            ("Tyhjennä", pygame.K_c),
+            ("Sulje", QUIT_KEY),
+        ],
     ]
 
     buttons = []
-    x = BUTTON_MARGIN
-    y = WINDOW_HEIGHT + GUIDE_HEIGHT + BUTTON_MARGIN
+    button_x = SCREEN_WIDTH - RIGHT_PANEL_WIDTH + SIDE_PANEL_MARGIN
+    button_w = RIGHT_PANEL_WIDTH - SIDE_PANEL_MARGIN * 2
 
-    for label, key in labels:
-        if x + BUTTON_WIDTH > WINDOW_WIDTH - BUTTON_MARGIN:
-            x = BUTTON_MARGIN
+    group_gap = 18
+    total_button_count = sum(len(group) for group in button_groups)
+    total_group_gaps = group_gap * (len(button_groups) - 1)
+    total_button_height = (
+        total_button_count * BUTTON_HEIGHT
+        + (total_button_count - 1) * BUTTON_MARGIN
+        + total_group_gaps
+    )
+
+    y = max(SIDE_PANEL_MARGIN * 2 + 34, (SCREEN_HEIGHT - total_button_height) // 2)
+
+    for group_index, group in enumerate(button_groups):
+        for label, key in group:
+            buttons.append(Button(button_x, y, button_w, BUTTON_HEIGHT, label, key))
             y += BUTTON_HEIGHT + BUTTON_MARGIN
 
-        buttons.append(
-            Button(x, y, BUTTON_WIDTH, BUTTON_HEIGHT, label, key)
-        )
-        x += BUTTON_WIDTH + BUTTON_MARGIN
+        if group_index < len(button_groups) - 1:
+            y += group_gap
 
     return buttons
 
+def can_edit_initial_obstacles(grid, selected_algorithm):
+    """Alkuperäisiä esteitä saa muokata lähtöpisteen ja maalin jälkeen ennen algoritmin valintaa."""
+    return grid.start is not None and grid.goal is not None and selected_algorithm is None
 
-def update_button_states(buttons, grid, selected_algorithm, path, last_result, auto_obstacle_count):
-    """Päivittää painikkeiden käytössä/pois käytöstä -tilan nykyisen tilanteen perusteella."""
+def update_button_states(buttons, grid, selected_algorithm, path, last_result, auto_obstacle_count, placement_mode=None):
+    """Päivittää painikkeiden tilan niin, että käyttö etenee oikeassa järjestyksessä."""
     has_start = grid.start is not None
     has_goal = grid.goal is not None
     has_start_and_goal = has_start and has_goal
@@ -154,27 +303,98 @@ def update_button_states(buttons, grid, selected_algorithm, path, last_result, a
     can_start_drive = bool(path) and last_result is not None and last_result.get("success", False)
 
     for button in buttons:
-        if button.key == pygame.K_p:
-            # Satunnaisesteet kannattaa luoda vasta, kun lähtö ja maali ovat olemassa.
+        button.enabled = True
+        button.active = False
+        button.primary = False
+        button.danger = button.key == QUIT_KEY
+
+        if button.key == pygame.K_s:
+            button.enabled = not has_start or placement_mode == "start"
+        elif button.key == pygame.K_g:
+            button.enabled = has_start and (not has_goal or placement_mode == "goal")
+        elif button.key == pygame.K_p:
+            button.enabled = can_edit_initial_obstacles(grid, selected_algorithm)
+        elif button.key in (pygame.K_d, pygame.K_a, pygame.K_l):
             button.enabled = has_start_and_goal
         elif button.key == AUTO_OBSTACLE_DECREASE_KEY:
-            # Ajonaikaisten esteiden valitsin aktivoituu vasta algoritmin valinnan jälkeen.
             button.enabled = has_algorithm and auto_obstacle_count > AUTO_OBSTACLE_MIN
         elif button.key == AUTO_OBSTACLE_INCREASE_KEY:
             button.enabled = has_algorithm and auto_obstacle_count < AUTO_OBSTACLE_MAX
-        elif button.key in (pygame.K_d, pygame.K_a, pygame.K_l):
-            # Algoritmin valinta tulee käyttöjärjestyksessä lähtö- ja maalipisteen jälkeen.
-            button.enabled = has_start_and_goal
         elif button.key == pygame.K_SPACE:
             button.enabled = can_calculate_route
         elif button.key == pygame.K_RETURN:
             button.enabled = can_start_drive
-        else:
-            button.enabled = True
 
+        if button.key == pygame.K_s and placement_mode == "start":
+            button.active = True
+        elif button.key == pygame.K_g and placement_mode == "goal":
+            button.active = True
+        elif button.key == pygame.K_d and selected_algorithm == "dijkstra":
+            button.active = True
+        elif button.key == pygame.K_a and selected_algorithm == "astar":
+            button.active = True
+        elif button.key == pygame.K_l and selected_algorithm == "dstar_lite":
+            button.active = True
+
+def get_next_recommended_key(grid, selected_algorithm, path, last_result, placement_mode=None):
+    """Palauttaa seuraavan loogisen päävaiheen painikkeen."""
+    if placement_mode in ("start", "goal"):
+        return None
+    if grid.start is None:
+        return pygame.K_s
+    if grid.goal is None:
+        return pygame.K_g
+    if selected_algorithm is None:
+        return pygame.K_d
+    if not path or last_result is None:
+        return pygame.K_SPACE
+    if last_result.get("success", False):
+        return pygame.K_RETURN
+    return pygame.K_SPACE
+
+def get_status_lines(grid, selected_algorithm, path, auto_obstacle_count):
+    """Muodostaa vasemman sivupaneelin pysyvät käyttöohjeet."""
+    instructions = [
+        "1) Valitse lähtöpiste.",
+        "2) Valitse maali.",
+        "3) Piirrä esteet hiirellä, tai",
+        " lisää satunnaisesteet.",
+        "4) Valitse algoritmi.",
+        "5) Laske reitti.",
+        "6) Aloita ajo.",
+        "",
+        "Esteet:",
+        "Maalaa vasemmalla hiirellä ",
+        "lisätäksesi.",
+        "Maalaa oikealla hiirellä ",
+        "poistaaksesi.",
+        "",
+        "Ajon aikana:",
+        "Klikkaa reitin eteen uusi este ",
+        "manuaalisesti TAI",
+        "Dyn +/- lisää automaattisia",
+        " ajonaikaisia esteitä (parempi).",
+        "",
+        "Sulje lopettaa ohjelman.",
+    ]
+
+    start_text = str(grid.start) if grid.start is not None else "-"
+    goal_text = str(grid.goal) if grid.goal is not None else "-"
+    algorithm_text = algorithm_display_name(selected_algorithm)
+    path_text = f"{max(0, len(path) - 1)} askelta" if path else "-"
+
+    status = [
+        "Tila",
+        f"Lähtö: {start_text}",
+        f"Maali: {goal_text}",
+        f"Algoritmi: {algorithm_text}",
+        f"Reitti: {path_text}",
+        f"Dynaamiset esteet: {auto_obstacle_count}",
+    ]
+    return instructions, status
 
 def draw_grid(screen, grid, path=None, visited=None, vehicle_position=None, buttons=None, font=None, selected_algorithm=None, placement_mode=None, auto_obstacle_count=0, auto_obstacle_positions=None):
-    """
+    """ 
     Piirtää ruudukon, esteet, lähtöpisteen, kohdepisteen,
     algoritmin tutkimat ruudut, löydetyn reitin ja ajoneuvon.
     """
@@ -197,8 +417,8 @@ def draw_grid(screen, grid, path=None, visited=None, vehicle_position=None, butt
             position = (row, col)
 
             rect = pygame.Rect(
-                col * CELL_SIZE,
-                row * CELL_SIZE,
+                GRID_OFFSET_X + col * CELL_SIZE,
+                GRID_OFFSET_Y + row * CELL_SIZE,
                 CELL_SIZE,
                 CELL_SIZE
             )
@@ -222,24 +442,67 @@ def draw_grid(screen, grid, path=None, visited=None, vehicle_position=None, butt
 
             pygame.draw.rect(screen, LIGHT_GRAY, rect, 1)
 
-    # Piirretään UI-paneeli ruudukon alapuolelle, jos nappipaneeli annettu.
+    # Piirretään sivupaneelit, jos nappipaneeli annettu.
     if buttons is not None and font is not None:
-        panel_rect = pygame.Rect(0, WINDOW_HEIGHT, WINDOW_WIDTH, PANEL_HEIGHT)
-        pygame.draw.rect(screen, DARK_GRAY, panel_rect)
+        left_rect = pygame.Rect(
+            SIDE_PANEL_MARGIN,
+            SIDE_PANEL_MARGIN,
+            LEFT_PANEL_WIDTH - SIDE_PANEL_MARGIN * 2,
+            SCREEN_HEIGHT - SIDE_PANEL_MARGIN * 2,
+        )
+        right_rect = pygame.Rect(
+            SCREEN_WIDTH - RIGHT_PANEL_WIDTH + SIDE_PANEL_MARGIN,
+            SIDE_PANEL_MARGIN,
+            RIGHT_PANEL_WIDTH - SIDE_PANEL_MARGIN * 2,
+            SCREEN_HEIGHT - SIDE_PANEL_MARGIN * 2,
+        )
 
-        obstacle_selector_state = "käytössä" if selected_algorithm is not None else "valitse ensin algoritmi"
-        guide_lines = [
-            "Käyttöjärjestys: 1) Aseta lähtö  2) Aseta maali  3) Piirrä esteet hiirellä tai valitse \"satunnaiset\"",
-            "4) Valitse algoritmi  5) Valitse ajonaikaiset esteet  6) Laske reitti  7) Aloita ajo",
-            f"Valittu algoritmi: {algorithm_display_name(selected_algorithm)}   |   Ajonaikaiset esteet: {auto_obstacle_count} ({obstacle_selector_state}, 0-10)",
-            f"Seuraava klikkaus: {next_click_display_name(placement_mode)}",
-        ]
+        pygame.draw.rect(screen, PANEL_BG, pygame.Rect(0, 0, LEFT_PANEL_WIDTH, SCREEN_HEIGHT))
+        pygame.draw.rect(screen, PANEL_BG, pygame.Rect(SCREEN_WIDTH - RIGHT_PANEL_WIDTH, 0, RIGHT_PANEL_WIDTH, SCREEN_HEIGHT))
 
-        y = WINDOW_HEIGHT + 6
-        for line in guide_lines:
-            line_surf = font.render(line, True, WHITE)
-            screen.blit(line_surf, (BUTTON_MARGIN, y))
-            y += line_surf.get_height() + 3
+        pygame.draw.rect(screen, CARD_BG, left_rect, border_radius=8)
+        pygame.draw.rect(screen, (78, 86, 96), left_rect, 1, border_radius=8)
+
+        pygame.draw.rect(screen, (44, 49, 56), right_rect, border_radius=8)
+        pygame.draw.rect(screen, (70, 78, 88), right_rect, 1, border_radius=8)
+
+        instructions, status = get_status_lines(
+            grid,
+            selected_algorithm,
+            path,
+            auto_obstacle_count,
+        )
+
+        title_surf = font.render("Ohjeet", True, WHITE)
+        screen.blit(title_surf, (left_rect.x + 12, left_rect.y + 12))
+
+        text_x = left_rect.x + 12
+        text_y = left_rect.y + 40
+        line_gap = 18
+
+        for line in instructions:
+            if line == "":
+                text_y += line_gap // 2
+                continue
+
+            color = HELP_TEXT_COLOR
+            if line in ("Esteet:", "Ajon aikana:"):
+                color = WHITE
+
+            line_surf = font.render(line, True, color)
+            screen.blit(line_surf, (text_x, text_y))
+            text_y += line_gap
+
+        status_y = max(text_y + 12, left_rect.bottom - 128)
+        status_title = font.render(status[0], True, WHITE)
+        screen.blit(status_title, (text_x, status_y))
+
+        for index, line in enumerate(status[1:]):
+            line_surf = font.render(line, True, MUTED_TEXT_COLOR)
+            screen.blit(line_surf, (text_x, status_y + 24 + index * line_gap))
+
+        button_title = font.render("Toiminnot", True, WHITE)
+        screen.blit(button_title, (right_rect.x + 12, right_rect.y + 12))
 
         for b in buttons:
             b.draw(screen, font)
@@ -281,7 +544,7 @@ def animate_search(screen, grid, visited_order, path, vehicle_position=None, but
         pygame.time.delay(VISITED_ANIMATION_DELAY_MS)
 
         for event in pygame.event.get():
-            if event.type == pygame.QUIT:
+            if should_quit_from_event(event, buttons):
                 pygame.quit()
                 sys.exit()
 
@@ -307,7 +570,7 @@ def animate_search(screen, grid, visited_order, path, vehicle_position=None, but
         pygame.time.delay(PATH_ANIMATION_DELAY_MS)
 
         for event in pygame.event.get():
-            if event.type == pygame.QUIT:
+            if should_quit_from_event(event, buttons):
                 pygame.quit()
                 sys.exit()
 
@@ -628,7 +891,7 @@ def animate_vehicle_with_manual_obstacles(
 
         while pygame.time.get_ticks() - start_tick < vehicle_delay:
             for event in pygame.event.get():
-                if event.type == pygame.QUIT:
+                if should_quit_from_event(event, buttons):
                     pygame.quit()
                     sys.exit()
 
@@ -866,7 +1129,7 @@ def animate_vehicle_with_dstar_lite(
 
         while pygame.time.get_ticks() - start_tick < vehicle_delay:
             for event in pygame.event.get():
-                if event.type == pygame.QUIT:
+                if should_quit_from_event(event, buttons):
                     pygame.quit()
                     sys.exit()
 
@@ -979,14 +1242,23 @@ def animate_vehicle_with_dstar_lite(
 
 def main():
     pygame.init()
-    # Ikkuna kasvatetaan paneelia varten
-    screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT + PANEL_HEIGHT))
-    pygame.display.set_caption("Ruudukkopohjainen reitinhakusimulaatio")
 
     clock = pygame.time.Clock()
     grid = Grid()
 
-    # UI -fontti ja napit
+    display_info = pygame.display.Info()
+    screen_width = min(max(1100, display_info.current_w - 120), display_info.current_w)
+    screen_height = min(max(620, display_info.current_h - 220), display_info.current_h)
+
+    update_layout_for_screen(screen_width, screen_height, grid)
+
+    # Oletuksena käytetään normaalia muutettavaa ikkunaa.
+    # Ohjeet ovat vasemmalla ja painikkeet oikealla, joten fullscreeniä ei tarvita.
+    fullscreen = False
+    screen = create_window(SCREEN_WIDTH, SCREEN_HEIGHT, fullscreen=False)
+    pygame.display.set_caption("Ruudukkopohjainen reitinhakusimulaatio")
+
+    # UI-fontti ja napit
     font = pygame.font.Font(None, 20)
     buttons = create_ui_buttons()
 
@@ -1008,22 +1280,6 @@ def main():
     # G painetaan kerran -> seuraava klikkaus asettaa kohdepisteen.
     placement_mode = None
 
-    print("Valitse ensin lähtöpiste, maali, esteet ja algoritmi käyttöliittymän painikkeilla.")
-    print("Komennot:")
-    print("S = valitse lähtöpisteen asetus, sitten klikkaa ruutua")
-    print("G = valitse kohdepisteen asetus, sitten klikkaa ruutua")
-    print("Vasen veto = piirrä alkuperäisiä esteitä")
-    print("Oikea veto = poista alkuperäisiä esteitä")
-    print("D = valitse Dijkstra")
-    print("A = valitse A*")
-    print("L = valitse D* Lite")
-    print("C = tyhjennä ruudukko")
-    print("P = generoi satunnaiset esteet")
-    print("+ / - = muuta automaattisten ajonaikaisten esteiden määrää algoritmin valinnan jälkeen (0-10)")
-    print("Välilyönti = suorita valittu algoritmi")
-    print("Enter = aloita ajo")
-    print("Ajon aikana vasen klikkaus = lisää dynaaminen este")
-
     running = True
 
     while running:
@@ -1031,19 +1287,23 @@ def main():
             if event.type == pygame.QUIT:
                 running = False
 
+            elif event.type == pygame.VIDEORESIZE and not fullscreen:
+                screen = pygame.display.set_mode((event.w, event.h), pygame.RESIZABLE)
+                buttons = recreate_layout(event.w, event.h, grid)
+
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 mouse_pos = pygame.mouse.get_pos()
 
-                # Jos klikataan UI-paneelia, käsitellään napin klikkaus.
-                if mouse_pos[1] >= WINDOW_HEIGHT:
-                    for b in buttons:
-                        if b.is_clicked(mouse_pos):
-                            # Postataan vastaava keydown-event jotta olemassa oleva
-                            # näppäinlogiikka hoitaa toiminnon.
-                            ev = pygame.event.Event(pygame.KEYDOWN, key=b.key)
-                            pygame.event.post(ev)
-                            break
-                    # UI-alueen klikkauksia ei käsitellä ruudukon klikkauksina
+                # Jos klikataan painiketta, käsitellään se ensin.
+                clicked_button = False
+                for b in buttons:
+                    if b.is_clicked(mouse_pos):
+                        ev = pygame.event.Event(pygame.KEYDOWN, key=b.key)
+                        pygame.event.post(ev)
+                        clicked_button = True
+                        break
+
+                if clicked_button:
                     continue
 
                 if not is_inside_grid_area(mouse_pos):
@@ -1059,6 +1319,8 @@ def main():
                     visited = []
                     vehicle_position = None
                     last_result = None
+                    selected_algorithm = None
+                    visible_auto_obstacle_positions.clear()
 
                     print(f"Lähtöpiste asetettu: {(row, col)}")
 
@@ -1070,10 +1332,12 @@ def main():
                     visited = []
                     vehicle_position = None
                     last_result = None
+                    selected_algorithm = None
+                    visible_auto_obstacle_positions.clear()
 
                     print(f"Kohdepiste asetettu: {(row, col)}")
 
-                elif event.button == 1:
+                elif event.button == 1 and can_edit_initial_obstacles(grid, selected_algorithm):
                     drawing_obstacles = True
                     erasing_obstacles = False
                     last_drawn_cell = (row, col)
@@ -1085,7 +1349,7 @@ def main():
                     vehicle_position = None
                     last_result = None
 
-                elif event.button == 3:
+                elif event.button == 3 and can_edit_initial_obstacles(grid, selected_algorithm):
                     erasing_obstacles = True
                     drawing_obstacles = False
                     last_drawn_cell = (row, col)
@@ -1128,9 +1392,35 @@ def main():
                         visited = []
                         vehicle_position = None
                         last_result = None
-
+    
             elif event.type == pygame.KEYDOWN:
-                if event.key == AUTO_OBSTACLE_DECREASE_KEY:
+                if event.key == QUIT_KEY:
+                    running = False
+
+                elif event.key == pygame.K_F11:
+                    fullscreen = not fullscreen
+                    if fullscreen:
+                        display_info = pygame.display.Info()
+                        screen_width = display_info.current_w
+                        screen_height = display_info.current_h
+                        update_layout_for_screen(screen_width, screen_height, grid)
+                        screen = create_window(SCREEN_WIDTH, SCREEN_HEIGHT, fullscreen=True)
+                    else:
+                        windowed_width = min(1280, SCREEN_WIDTH)
+                        windowed_height = min(900, SCREEN_HEIGHT)
+                        update_layout_for_screen(windowed_width, windowed_height, grid)
+                        screen = create_window(SCREEN_WIDTH, SCREEN_HEIGHT, fullscreen=False)
+                    buttons = create_ui_buttons()
+
+                elif event.key == pygame.K_ESCAPE and fullscreen:
+                    fullscreen = False
+                    windowed_width = min(1280, SCREEN_WIDTH)
+                    windowed_height = min(900, SCREEN_HEIGHT)
+                    update_layout_for_screen(windowed_width, windowed_height, grid)
+                    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE)
+                    buttons = create_ui_buttons()
+
+                elif event.key == AUTO_OBSTACLE_DECREASE_KEY:
                     if selected_algorithm is None:
                         print("\nValitse ensin algoritmi ennen ajonaikaisten esteiden määrää.")
                     else:
@@ -1145,6 +1435,9 @@ def main():
                         print(f"\nAutomaattisia ajonaikaisia esteitä: {auto_obstacle_count}")
 
                 elif event.key == pygame.K_s:
+                    if grid.start is not None:
+                        print("\nLähtöpiste on jo asetettu. Tyhjennä ruudukko, jos haluat aloittaa alusta.")
+                        continue
                     placement_mode = "start"
                     drawing_obstacles = False
                     erasing_obstacles = False
@@ -1152,6 +1445,12 @@ def main():
                     print("\nLähtöpisteen asetus valittu. Klikkaa ruutua.")
 
                 elif event.key == pygame.K_g:
+                    if grid.start is None:
+                        print("\nValitse ensin lähtöpiste.")
+                        continue
+                    if grid.goal is not None:
+                        print("\nMaali on jo asetettu. Tyhjennä ruudukko, jos haluat aloittaa alusta.")
+                        continue
                     placement_mode = "goal"
                     drawing_obstacles = False
                     erasing_obstacles = False
@@ -1159,6 +1458,9 @@ def main():
                     print("\nKohdepisteen asetus valittu. Klikkaa ruutua.")
 
                 elif event.key == pygame.K_d:
+                    if grid.start is None or grid.goal is None:
+                        print("\nValitse ensin lähtöpiste ja maali.")
+                        continue
                     selected_algorithm = "dijkstra"
                     placement_mode = None
 
@@ -1170,6 +1472,9 @@ def main():
                     print("\nValittu algoritmi: Dijkstra")
 
                 elif event.key == pygame.K_a:
+                    if grid.start is None or grid.goal is None:
+                        print("\nValitse ensin lähtöpiste ja maali.")
+                        continue
                     selected_algorithm = "astar"
                     placement_mode = None
 
@@ -1181,6 +1486,9 @@ def main():
                     print("\nValittu algoritmi: A*")
 
                 elif event.key == pygame.K_l:
+                    if grid.start is None or grid.goal is None:
+                        print("\nValitse ensin lähtöpiste ja maali.")
+                        continue
                     selected_algorithm = "dstar_lite"
                     placement_mode = None
 
@@ -1199,10 +1507,15 @@ def main():
                     visited = []
                     vehicle_position = None
                     last_result = None
+                    selected_algorithm = None
+                    auto_obstacle_count = 0
                     visible_auto_obstacle_positions.clear()
                     print("\nRuudukko tyhjennetty.")
 
                 elif event.key == pygame.K_p:
+                    if not can_edit_initial_obstacles(grid, selected_algorithm):
+                        print("\nSatunnaisesteet voi lisätä vasta lähtöpisteen ja maalin jälkeen, ennen algoritmin valintaa.")
+                        continue
                     grid.generate_random_obstacles()
                     placement_mode = None
 
@@ -1211,7 +1524,7 @@ def main():
                     vehicle_position = None
                     last_result = None
 
-                    print("\nSatunnaiset esteet generoitu.")
+                    print("\nSatunnaiset esteet generoitu. Valitse seuraavaksi algoritmi.")
                     print(f"Esteiden määrä: {len(grid.obstacles)}")
 
                 elif event.key == pygame.K_SPACE:
@@ -1278,7 +1591,7 @@ def main():
                                 auto_obstacle_count=auto_obstacle_count
                             )
 
-        update_button_states(buttons, grid, selected_algorithm, path, last_result, auto_obstacle_count)
+        update_button_states(buttons, grid, selected_algorithm, path, last_result, auto_obstacle_count, placement_mode)
 
         draw_grid(
             screen,
