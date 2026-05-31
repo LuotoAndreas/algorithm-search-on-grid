@@ -2,11 +2,11 @@
 
 Tämä ohjelma visualisoi ja vertailee reitinhakualgoritmeja ruudukkoympäristössä. Ohjelmassa voi valita lähtöpisteen, maalin, esteitä ja algoritmin sekä seurata, miten reitti lasketaan ja miten ajonaikaiset esteet vaikuttavat uudelleenreititykseen.
 
-## Käytetyt algoritmit
+## Käynnistä venv virtuaaliympäristö 
 
-- Dijkstra
-- A*
-- D* Lite
+```bash
+start.bat
+```
 
 ## Asennus
 
@@ -17,7 +17,7 @@ pip install -r requirements.txt
 ```
 
 ## Asetukset
-config.py voi säätää ruudukon kokoa
+config.py tiedostossa voi säätää ruudukon kokoa
 
 ## Ohjelman käynnistys
 
@@ -27,11 +27,6 @@ Käynnistä visualisointiohjelma:
 python main.py
 ```
 
-Windowsissa voit käyttää myös:
-
-```bash
-start.bat
-```
 
 ## Käyttöjärjestys
 
@@ -51,7 +46,7 @@ start.bat
 
 ## Tulokset
 
-Yksittäisen ajon tulokset tallennetaan tiedostoon:
+Käyttöliittymässä yksittäisen ajon tulokset tallennetaan tiedostoon:
 
 ```text
 results.csv
@@ -60,11 +55,11 @@ results.csv
 Laajemmat koetulokset voi luoda komennolla:
 
 ```bash
-python run_experiments.py --scenarios 50 --dynamic-obstacles 4,5,6,7,8,9,10 --obstacle-probability 0.15
+python run_experiments.py --scenarios 50 --dynamic-obstacles 7 --obstacle-probability 0.15
 ```
-Jossa 50 on ajettavien skenaarioiden määrä, dynamic-obstacles puolestaan monenko esteen kanssa ajoja ajetaan. Probability on generoitujen esteiden tiheys.
+Jossa 50 on ajettavien skenaarioiden määrä, dynamic-obstacles puolestaan monenko esteen kanssa ajoja ajetaan. (nyt valittuna 7 esteen kanssa. Valita voi myös vaikka --dynamic-obstacles 7,10 jolloin ajetaan 7 ja sitten 10 esteen kanssa per ajo.) Probability on generoitujen esteiden tiheys ruudukolla.
 
-Tulokset tallentuvat tiedostoon:
+Komentoriviltä ajon tulokset tallentuvat tiedostoon:
 
 ```text
 experiment_results.csv
