@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 
 from grid import Grid
+from maps import get_city_map, get_city_map_names, get_city_maps
 from algorithms import dijkstra, astar
 from dstar_lite import DStarLite
 
@@ -13,30 +14,29 @@ from dstar_lite import DStarLite
 ALGORITHMS = ("Dijkstra", "A*", "D* Lite")
 
 
-def make_grid(rows, cols, start, goal, obstacles):
+def make_grid(rows, cols, start, goal, obstacles, map_info=None):
+    """
+    Luo Grid-olion kokeellista ajoa varten.
+
+    Kokeissa ruudukko perustuu valmiiseen kaupunkikarttaan, jossa esteet ovat
+    rakennuksia, kortteleita tai aiemmin lisättyjä tiesulkuja. Algoritmien
+    kannalta oleellista on, mitkä ruudut ovat kulkukelpoisia.
+    """
     grid = Grid()
     grid.rows = rows
     grid.cols = cols
     grid.start = start
     grid.goal = goal
     grid.obstacles = set(obstacles)
+
+    if map_info is not None:
+        grid.map_name = map_info.get("name")
+        grid.map_display_name = map_info.get("display_name")
+        grid.map_category = map_info.get("category")
+        grid.road_cells = set(map_info.get("roads", set()))
+        grid.base_obstacles = set(map_info.get("obstacles", set()))
+
     return grid
-
-
-def generate_obstacles(rows, cols, start, goal, probability, rng):
-    obstacles = set()
-
-    for row in range(rows):
-        for col in range(cols):
-            position = (row, col)
-
-            if position == start or position == goal:
-                continue
-
-            if rng.random() < probability:
-                obstacles.add(position)
-
-    return obstacles
 
 
 def path_length(path):
@@ -71,15 +71,15 @@ def run_initial_search(algorithm_name, grid, start, goal):
     raise ValueError(f"Tuntematon algoritmi: {algorithm_name}")
 
 
-def route_still_exists_after_obstacles(rows, cols, start, goal, initial_obstacles, extra_obstacles):
+def route_still_exists_after_obstacles(rows, cols, start, goal, initial_obstacles, extra_obstacles, map_info):
     """
-    Tarkistaa Dijkstralla, että lisäesteiden jälkeen maaliin on yhä jokin reitti.
+    Tarkistaa Dijkstralla, että lisättyjen tiesulkujen jälkeen maaliin on yhä reitti.
 
     Tätä käytetään vain skenaarion muodostamiseen. Varsinainen vertailu tehdään
     myöhemmin jokaisella algoritmilla erikseen.
     """
     test_obstacles = set(initial_obstacles) | set(extra_obstacles)
-    test_grid = make_grid(rows, cols, start, goal, test_obstacles)
+    test_grid = make_grid(rows, cols, start, goal, test_obstacles, map_info=map_info)
     result = dijkstra(test_grid, start, goal)
     return result["success"]
 
@@ -92,16 +92,19 @@ def select_dynamic_obstacles_for_path(
     start,
     goal,
     initial_obstacles,
+    map_info,
     middle_start_ratio=0.25,
     middle_end_ratio=0.75,
 ):
     """
-    Valitsee ajonaikaiset esteet yhden algoritmin omalta alkuperäiseltä reitiltä.
+    Valitsee skenaariolle yhteiset ajonaikaiset tiesulut viitereitiltä.
 
-    Tämä ratkaisee tilanteen, jossa Dijkstra, A* ja D* Lite löytävät yhtä pitkän
-    mutta eri ruutuja pitkin kulkevan reitin. Esteet kohdistetaan jokaisen
-    algoritmin omaan reittiin, jolloin häiriö on jokaiselle algoritmille
-    vaikutuksellinen samalla periaatteella.
+    Tiesulut valitaan yhden viitereitin keskiosasta ja pidetään samoina kaikille
+    algoritmeille. Näin Dijkstra, A* ja D* Lite kohtaavat saman kartan, saman
+    lähtöpisteen, saman maalipisteen ja samat ympäristömuutokset.
+
+    Asetelma on silti dynaaminen, koska tiesulkuja ei lisätä alkuperäiseen
+    karttaan ennen alkureititystä. Ne lisätään vasta simuloidun ajon aikana.
     """
     if count <= 0:
         return []
@@ -115,6 +118,8 @@ def select_dynamic_obstacles_for_path(
     if first_allowed_index > last_allowed_index:
         return None
 
+    road_cells = set(map_info.get("roads", set()))
+
     candidates = [
         cell
         for index, cell in enumerate(path)
@@ -122,14 +127,15 @@ def select_dynamic_obstacles_for_path(
         and cell != start
         and cell != goal
         and cell not in initial_obstacles
+        and (not road_cells or cell in road_cells)
     ]
 
     if len(candidates) < count:
         return None
 
-    # Valitaan esteet tasaisesti reitin keskiosasta. Kokeillaan pieniä siirtymiä,
+    # Valitaan tiesulut tasaisesti reitin keskiosasta. Kokeillaan pieniä siirtymiä,
     # jotta löydetään ryhmä, joka ei tee koko reittiä mahdottomaksi.
-    max_group_attempts = min(40, len(candidates))
+    max_group_attempts = min(60, len(candidates))
 
     for shift in range(max_group_attempts):
         selected = []
@@ -158,6 +164,7 @@ def select_dynamic_obstacles_for_path(
             goal=goal,
             initial_obstacles=initial_obstacles,
             extra_obstacles=selected,
+            map_info=map_info,
         ):
             return selected
 
@@ -166,10 +173,11 @@ def select_dynamic_obstacles_for_path(
 
 def make_event_schedule(reference_path, dynamic_obstacles):
     """
-    Palauttaa listan (trigger_step, obstacle)-pareja.
+    Palauttaa listan (trigger_step, obstacle)-pareja viitereitin perusteella.
 
-    Este lisätään hieman ennen kuin ajoneuvo saavuttaisi kyseisen ruudun
-    algoritmin omalla alkuperäisellä reitillä.
+    Kaikki algoritmit saavat saman aikataulun. Jos tiesulku ei osu jonkin
+    algoritmin jäljellä olevalle reitille, se lisätään silti karttaan, mutta se ei
+    aiheuta kyseiselle algoritmille uudelleenreititystä.
     """
     schedule = []
 
@@ -188,24 +196,26 @@ def make_event_schedule(reference_path, dynamic_obstacles):
 
 def simulate_algorithm(
     algorithm_name,
-    rows,
-    cols,
+    map_info,
     start,
     goal,
     initial_obstacles,
-    dynamic_obstacle_count,
+    selected_dynamic_obstacles,
+    event_schedule,
 ):
     """
-    Ajaa yhden algoritmin yhdessä skenaariossa ilman Pygame-visualisointia.
+    Ajaa yhden algoritmin yhdessä kaupunkikarttaskenaariossa ilman Pygame-visualisointia.
 
-    Ajonaikaiset esteet valitaan tämän algoritmin omalta alkuperäiseltä reitiltä.
-    Näin jokainen algoritmi kohtaa vaikutuksellisen häiriön, vaikka sen reitti
-    olisi eri kuin muilla algoritmeilla.
+    Alkuympäristö ei ole satunnainen estekenttä, vaan valmis tieverkkokartta.
+    Ajonaikaiset muutokset ovat skenaariokohtaisia tiesulkuja, jotka ovat samat
+    kaikille algoritmeille ja ilmestyvät vasta ajon aikana.
     """
-    grid = make_grid(rows, cols, start, goal, initial_obstacles)
+    rows = map_info["rows"]
+    cols = map_info["cols"]
+    grid = make_grid(rows, cols, start, goal, initial_obstacles, map_info=map_info)
     initial_result, planner = run_initial_search(algorithm_name, grid, start, goal)
 
-    selected_dynamic_obstacles = []
+    selected_dynamic_obstacles = list(selected_dynamic_obstacles)
     dynamic_obstacle_positions = []
     effective_obstacle_positions = []
     reroute_count = 0
@@ -215,8 +225,7 @@ def simulate_algorithm(
     if not initial_result["success"]:
         return build_result_row(
             algorithm_name,
-            rows,
-            cols,
+            map_info,
             start,
             goal,
             initial_obstacles,
@@ -232,23 +241,10 @@ def simulate_algorithm(
             success=False,
         )
 
-    selected_dynamic_obstacles = select_dynamic_obstacles_for_path(
-        path=initial_result["path"],
-        count=dynamic_obstacle_count,
-        rows=rows,
-        cols=cols,
-        start=start,
-        goal=goal,
-        initial_obstacles=initial_obstacles,
-    )
-
-    if selected_dynamic_obstacles is None:
-        selected_dynamic_obstacles = []
-
     current_path = list(initial_result["path"])
     current_index = 0
     travelled_path = []
-    event_schedule = make_event_schedule(current_path, selected_dynamic_obstacles)
+    event_schedule = list(event_schedule)
     next_event_index = 0
     success = True
 
@@ -336,8 +332,7 @@ def simulate_algorithm(
 
     return build_result_row(
         algorithm_name,
-        rows,
-        cols,
+        map_info,
         start,
         goal,
         initial_obstacles,
@@ -356,8 +351,7 @@ def simulate_algorithm(
 
 def build_result_row(
     algorithm_name,
-    rows,
-    cols,
+    map_info,
     start,
     goal,
     initial_obstacles,
@@ -374,8 +368,13 @@ def build_result_row(
 ):
     return {
         "algorithm": algorithm_name,
-        "grid_rows": rows,
-        "grid_cols": cols,
+        "map_name": map_info["name"],
+        "map_display_name": map_info["display_name"],
+        "map_category": map_info["category"],
+        "grid_rows": map_info["rows"],
+        "grid_cols": map_info["cols"],
+        "road_cell_count": len(map_info["roads"]),
+        "building_obstacle_count": len(map_info["obstacles"]),
         "start": start,
         "goal": goal,
         "initial_obstacle_count": len(initial_obstacles),
@@ -399,22 +398,47 @@ def build_result_row(
     }
 
 
-def create_valid_scenario(rows, cols, obstacle_probability, seed, max_attempts):
-    """
-    Luo skenaarion, jossa kaikki algoritmit löytävät alkuperäisen reitin.
+def choose_start_goal(road_cells, rng):
+    """Valitsee lähtö- ja maalipisteen tieverkolta."""
+    start = rng.choice(road_cells)
+    goal = rng.choice(road_cells)
 
-    Dynaamiset esteet valitaan myöhemmin jokaisen algoritmin omalta reitiltä,
-    joten skenaarion ei tarvitse sisältää kaikille yhteistä reittiosuutta.
+    while goal == start:
+        goal = rng.choice(road_cells)
+
+    return start, goal
+
+
+def create_valid_city_scenario(map_info, seed, max_attempts, min_path_length):
+    """
+    Luo yhden kaupunkikarttaan perustuvan skenaarion.
+
+    Lähtö- ja maalipiste valitaan kartan tieverkolta. Skenaario hyväksytään,
+    jos kaikki algoritmit löytävät alkuperäisen reitin ja reitti on riittävän
+    pitkä dynaamisten tiesulkujen mielekästä testaamista varten.
     """
     rng = random.Random(seed)
-    start = (0, 0)
-    goal = (rows - 1, cols - 1)
+    road_cells = sorted(map_info["roads"])
+    initial_obstacles = set(map_info["obstacles"])
 
     for attempt in range(1, max_attempts + 1):
-        scenario_seed = rng.randint(1, 10_000_000)
-        scenario_rng = random.Random(scenario_seed)
-        obstacles = generate_obstacles(rows, cols, start, goal, obstacle_probability, scenario_rng)
-        base_grid = make_grid(rows, cols, start, goal, obstacles)
+        start, goal = choose_start_goal(road_cells, rng)
+        base_grid = make_grid(
+            map_info["rows"],
+            map_info["cols"],
+            start,
+            goal,
+            initial_obstacles,
+            map_info=map_info,
+        )
+
+        reference_result = dijkstra(base_grid, start, goal)
+
+        if not reference_result["success"]:
+            continue
+
+        if reference_result["path_length"] < min_path_length:
+            continue
 
         all_success = True
         for algorithm_name in ALGORITHMS:
@@ -428,14 +452,62 @@ def create_valid_scenario(rows, cols, obstacle_probability, seed, max_attempts):
             continue
 
         return {
-            "scenario_seed": scenario_seed,
             "start": start,
             "goal": goal,
-            "obstacles": obstacles,
+            "obstacles": initial_obstacles,
             "attempts_used": attempt,
         }
 
     return None
+
+
+def build_shared_dynamic_obstacle_scenario(map_info, start, goal, initial_obstacles, dynamic_count):
+    """
+    Laskee viitereitin ja valitsee kaikille algoritmeille yhteiset tiesulut.
+
+    Viitereittinä käytetään A*:a. A* sopii tähän, koska se tuottaa lyhimmän
+    reitin kuten Dijkstra, mutta vastaa paremmin heuristista reitinhakua.
+    Tiesulut eivät kuitenkaan ole A*:n etu, koska samat sulut annetaan myös
+    Dijkstralle ja D* Litelle.
+    """
+    reference_grid = make_grid(
+        map_info["rows"],
+        map_info["cols"],
+        start,
+        goal,
+        initial_obstacles,
+        map_info=map_info,
+    )
+    reference_result = astar(reference_grid, start, goal)
+
+    if not reference_result["success"]:
+        return None
+
+    selected_dynamic_obstacles = select_dynamic_obstacles_for_path(
+        path=reference_result["path"],
+        count=dynamic_count,
+        rows=map_info["rows"],
+        cols=map_info["cols"],
+        start=start,
+        goal=goal,
+        initial_obstacles=initial_obstacles,
+        map_info=map_info,
+    )
+
+    if selected_dynamic_obstacles is None or len(selected_dynamic_obstacles) < dynamic_count:
+        return None
+
+    event_schedule = make_event_schedule(reference_result["path"], selected_dynamic_obstacles)
+
+    if len(event_schedule) < dynamic_count:
+        return None
+
+    return {
+        "reference_algorithm": "A*",
+        "reference_path": reference_result["path"],
+        "selected_dynamic_obstacles": selected_dynamic_obstacles,
+        "event_schedule": event_schedule,
+    }
 
 
 def write_rows(output_path, rows):
@@ -450,44 +522,60 @@ def write_rows(output_path, rows):
         writer.writerows(rows)
 
 
-def parse_grid_sizes(value):
-    sizes = []
-    for item in value.split(","):
-        item = item.strip().lower()
-        if "x" in item:
-            rows, cols = item.split("x", 1)
-            sizes.append((int(rows), int(cols)))
-        else:
-            number = int(item)
-            sizes.append((number, number))
-    return sizes
-
-
 def parse_int_list(value):
     return [int(item.strip()) for item in value.split(",") if item.strip()]
 
 
+def resolve_maps(value):
+    """
+    Palauttaa kokeissa käytettävät kartat.
+
+    --maps all käyttää kaikkia valmiita karttoja.
+    Muuten arvo annetaan pilkulla erotettuna listana karttojen sisäisiä nimiä.
+    """
+    if value.strip().lower() == "all":
+        return get_city_maps()
+
+    selected = []
+    for name in value.split(","):
+        cleaned = name.strip()
+        if cleaned:
+            selected.append(get_city_map(cleaned))
+
+    if not selected:
+        raise ValueError("Yhtään karttaa ei valittu.")
+
+    return selected
+
+
 def main():
     parser = argparse.ArgumentParser(
-        description="Aja reitinhakualgoritmien vertailukokeita ilman Pygame-käyttöliittymää."
+        description="Aja reitinhakualgoritmien vertailukokeita valmiilla kaupunkimaisilla ruudukkokartoilla."
     )
     parser.add_argument("--output", default="experiment_results.csv")
-    parser.add_argument("--grid-sizes", default="60x60", help="Esim. 60x60 tai 60x60,80x80")
-    parser.add_argument("--scenarios", type=int, default=10, help="Skenaarioiden määrä per ruudukkokoko ja estemäärä")
-    parser.add_argument("--dynamic-obstacles", default="1,3,5", help="Ajonaikaisten esteiden määrät, esim. 1,3,5")
-    parser.add_argument("--obstacle-probability", type=float, default=0.20)
+    parser.add_argument(
+        "--maps",
+        default="all",
+        help=(
+            "Käytettävät kartat. Arvo 'all' käyttää kaikkia karttoja. "
+            f"Yksittäisiä karttoja voi antaa pilkulla erotettuna. Saatavilla: {', '.join(get_city_map_names())}"
+        ),
+    )
+    parser.add_argument("--scenarios", type=int, default=10, help="Skenaarioiden määrä per kartta ja tiesulkumäärä")
+    parser.add_argument("--dynamic-obstacles", default="1,3,5", help="Ajonaikaisten tiesulkujen määrät, esim. 1,3,5")
     parser.add_argument("--seed", type=int, default=12345)
     parser.add_argument("--max-attempts", type=int, default=500)
+    parser.add_argument("--min-path-length", type=int, default=25)
     args = parser.parse_args()
 
-    grid_sizes = parse_grid_sizes(args.grid_sizes)
+    selected_maps = resolve_maps(args.maps)
     dynamic_obstacle_counts = parse_int_list(args.dynamic_obstacles)
     output_path = Path(args.output)
     all_rows = []
     scenario_id = 1
     master_rng = random.Random(args.seed)
 
-    for rows, cols in grid_sizes:
+    for map_info in selected_maps:
         for dynamic_count in dynamic_obstacle_counts:
             created = 0
             attempts = 0
@@ -497,61 +585,62 @@ def main():
                 if attempts > args.max_attempts:
                     print(
                         f"Varoitus: skenaarioita löytyi vain {created}/{args.scenarios} "
-                        f"asetuksilla {rows}x{cols}, esteitä {dynamic_count}."
+                        f"kartalla {map_info['display_name']}, tiesulkuja {dynamic_count}."
                     )
                     break
 
-                seed = master_rng.randint(1, 10_000_000)
-                scenario = create_valid_scenario(
-                    rows=rows,
-                    cols=cols,
-                    obstacle_probability=args.obstacle_probability,
-                    seed=seed,
-                    max_attempts=30,
+                scenario_seed = master_rng.randint(1, 10_000_000)
+                scenario = create_valid_city_scenario(
+                    map_info=map_info,
+                    seed=scenario_seed,
+                    max_attempts=50,
+                    min_path_length=args.min_path_length,
                 )
 
                 if scenario is None:
                     continue
 
+                shared_dynamic_scenario = build_shared_dynamic_obstacle_scenario(
+                    map_info=map_info,
+                    start=scenario["start"],
+                    goal=scenario["goal"],
+                    initial_obstacles=scenario["obstacles"],
+                    dynamic_count=dynamic_count,
+                )
+
+                if shared_dynamic_scenario is None:
+                    continue
+
                 scenario_rows = []
-                valid_for_all_algorithms = True
 
                 for algorithm_name in ALGORITHMS:
                     result_row = simulate_algorithm(
                         algorithm_name=algorithm_name,
-                        rows=rows,
-                        cols=cols,
+                        map_info=map_info,
                         start=scenario["start"],
                         goal=scenario["goal"],
                         initial_obstacles=scenario["obstacles"],
-                        dynamic_obstacle_count=dynamic_count,
+                        selected_dynamic_obstacles=shared_dynamic_scenario["selected_dynamic_obstacles"],
+                        event_schedule=shared_dynamic_scenario["event_schedule"],
                     )
 
-                    # Jos pyydettiin esteitä, mutta algoritmin omalta reitiltä ei
-                    # saatu valittua niitä, hylätään skenaario kokonaan.
-                    if dynamic_count > 0 and len(result_row["selected_dynamic_obstacles"]) < dynamic_count:
-                        valid_for_all_algorithms = False
-                        break
-
                     scenario_rows.append(result_row)
-
-                if not valid_for_all_algorithms:
-                    continue
 
                 for result_row in scenario_rows:
                     result_row = {
                         "scenario_id": scenario_id,
-                        "scenario_seed": scenario["scenario_seed"],
-                        "obstacle_probability": args.obstacle_probability,
+                        "scenario_seed": scenario_seed,
                         "dynamic_obstacle_count_requested": dynamic_count,
+                        "dynamic_obstacle_reference_algorithm": shared_dynamic_scenario["reference_algorithm"],
+                        "dynamic_obstacle_event_schedule": shared_dynamic_scenario["event_schedule"],
                         **result_row,
                     }
                     all_rows.append(result_row)
 
                 print(
-                    f"Skenaario {scenario_id}: {rows}x{cols}, "
-                    f"ajonaikaisia esteitä {dynamic_count}, "
-                    f"esteet valitaan kunkin algoritmin omalta reitiltä."
+                    f"Skenaario {scenario_id}: {map_info['display_name']}, "
+                    f"lähtö {scenario['start']}, maali {scenario['goal']}, "
+                    f"yhteisiä ajonaikaisia tiesulkuja {dynamic_count}."
                 )
 
                 scenario_id += 1

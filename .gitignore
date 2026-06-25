@@ -18,8 +18,16 @@ env/
 # Tulostiedostot / simulaation ajotulokset
 results.csv
 experiment_results.csv
+summary_final.csv
+summary_validation_shared.csv
+summary_validation.csv
+
+experiment_results_final.csv
+experiment_results_validation_shared.csv
+experiment_results_validation.csv
 *.log
 
 # Käyttöjärjestelmän tiedostot
 .DS_Store
 Thumbs.db
+

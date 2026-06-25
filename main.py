@@ -20,6 +20,7 @@ from config import (
     VEHICLE_MOVE_DELAY_MS,
 )
 from grid import Grid
+from maps import get_city_map_by_index, get_city_map_count
 from algorithms import dijkstra, astar
 from dstar_lite import DStarLite, dstar_lite_search
 from metrics import SimulationMetrics
@@ -88,10 +89,16 @@ DISABLED_TEXT_COLOR = (75, 78, 82)
 HELP_TEXT_COLOR = (225, 225, 225)
 MUTED_TEXT_COLOR = (188, 194, 202)
 AUTO_OBSTACLE_COLOR = (160, 80, 200)
+TRAVELLED_PATH_COLOR = (170, 210, 255)
+ROAD_GRID_LINE_COLOR = (235, 235, 235)
+DRAW_ROAD_GRID_LINES = True
+DRAW_BUILDING_GRID_LINES = False
 AUTO_OBSTACLE_MIN = 0
 AUTO_OBSTACLE_MAX = 10
 AUTO_OBSTACLE_DECREASE_KEY = pygame.K_MINUS
 AUTO_OBSTACLE_INCREASE_KEY = pygame.K_EQUALS
+MAP_PREVIOUS_KEY = pygame.K_LEFT
+MAP_NEXT_KEY = pygame.K_RIGHT
 
 # Nämä arvot päivitetään käynnistyksessä ja ikkunan koon muuttuessa.
 # Näin ruudukko skaalautuu näytölle eikä mene ikkunan ulkopuolelle.
@@ -231,35 +238,31 @@ class Button:
         return tuple(min(255, value + amount) for value in color)
 
 def create_ui_buttons():
-    """Luo painikkeet ruudukon oikealle puolelle ryhmiteltynä.
-
-    Ryhmien otsikoita ei piirretä käyttöliittymään. Ryhmien väliin jätetään
-    vain hieman enemmän pystysuuntaista tyhjää tilaa, jotta toiminnot
-    hahmottuvat paremmin.
-    """
+    """Luo käyttöliittymäpaneelin painikkeet käyttöjärjestyksen mukaiseen järjestykseen."""
     button_groups = [
         [
-            ("Lähtöpiste", pygame.K_s),
-            ("Maali", pygame.K_g),
+            ("1 Aseta lähtö", pygame.K_s),
+            ("2 Aseta maali", pygame.K_g),
         ],
         [
-            ("Satunnaisesteet", pygame.K_p),
+            ("3 Kartta -", MAP_PREVIOUS_KEY),
+            ("3 Kartta +", MAP_NEXT_KEY),
         ],
         [
-            ("Dijkstra", pygame.K_d),
-            ("A*", pygame.K_a),
-            ("D* Lite", pygame.K_l),
+            ("4 Dijkstra", pygame.K_d),
+            ("4 A*", pygame.K_a),
+            ("4 D* Lite", pygame.K_l),
         ],
         [
-            ("Dynaamiset -", AUTO_OBSTACLE_DECREASE_KEY),
-            ("Dynaamiset +", AUTO_OBSTACLE_INCREASE_KEY),
+            ("Sulut -", AUTO_OBSTACLE_DECREASE_KEY),
+            ("Sulut +", AUTO_OBSTACLE_INCREASE_KEY),
         ],
         [
-            ("Laske reitti", pygame.K_SPACE),
-            ("Aloita ajo", pygame.K_RETURN),
+            ("5 Laske reitti", pygame.K_SPACE),
+            ("6 Aloita ajo", pygame.K_RETURN),
         ],
-        [            
-            ("Tyhjennä", pygame.K_c),
+        [
+            ("Palauta", pygame.K_c),
             ("Sulje", QUIT_KEY),
         ],
     ]
@@ -312,11 +315,12 @@ def update_button_states(buttons, grid, selected_algorithm, path, last_result, a
             button.enabled = not has_start or placement_mode == "start"
         elif button.key == pygame.K_g:
             button.enabled = has_start and (not has_goal or placement_mode == "goal")
-        elif button.key == pygame.K_p:
-            button.enabled = can_edit_initial_obstacles(grid, selected_algorithm)
+        elif button.key in (MAP_PREVIOUS_KEY, MAP_NEXT_KEY):
+            button.enabled = get_city_map_count() > 1
         elif button.key in (pygame.K_d, pygame.K_a, pygame.K_l):
             button.enabled = has_start_and_goal
         elif button.key == AUTO_OBSTACLE_DECREASE_KEY:
+            # Ajonaikaisten tiesulkujen valitsin aktivoituu vasta algoritmin valinnan jälkeen.
             button.enabled = has_algorithm and auto_obstacle_count > AUTO_OBSTACLE_MIN
         elif button.key == AUTO_OBSTACLE_INCREASE_KEY:
             button.enabled = has_algorithm and auto_obstacle_count < AUTO_OBSTACLE_MAX
@@ -393,8 +397,8 @@ def get_status_lines(grid, selected_algorithm, path, auto_obstacle_count):
     ]
     return instructions, status
 
-def draw_grid(screen, grid, path=None, visited=None, vehicle_position=None, buttons=None, font=None, selected_algorithm=None, placement_mode=None, auto_obstacle_count=0, auto_obstacle_positions=None):
-    """ 
+def draw_grid(screen, grid, path=None, visited=None, travelled_path=None, vehicle_position=None, buttons=None, font=None, selected_algorithm=None, placement_mode=None, auto_obstacle_count=0, auto_obstacle_positions=None):
+    """
     Piirtää ruudukon, esteet, lähtöpisteen, kohdepisteen,
     algoritmin tutkimat ruudut, löydetyn reitin ja ajoneuvon.
     """
@@ -404,6 +408,9 @@ def draw_grid(screen, grid, path=None, visited=None, vehicle_position=None, butt
     if visited is None:
         visited = []
 
+    if travelled_path is None:
+        travelled_path = []
+
     if auto_obstacle_positions is None:
         auto_obstacle_positions = set()
 
@@ -411,6 +418,7 @@ def draw_grid(screen, grid, path=None, visited=None, vehicle_position=None, butt
 
     path_set = set(path)
     visited_set = set(visited)
+    travelled_path_set = set(travelled_path)
 
     for row in range(grid.rows):
         for col in range(grid.cols):
@@ -423,24 +431,49 @@ def draw_grid(screen, grid, path=None, visited=None, vehicle_position=None, butt
                 CELL_SIZE
             )
 
-            if position == vehicle_position:
-                pygame.draw.rect(screen, ORANGE, rect)
-            elif position == grid.start:
-                pygame.draw.rect(screen, GREEN, rect)
-            elif position == grid.goal:
-                pygame.draw.rect(screen, RED, rect)
-            elif position in auto_obstacle_positions:
-                pygame.draw.rect(screen, AUTO_OBSTACLE_COLOR, rect)
-            elif grid.is_obstacle(row, col):
-                pygame.draw.rect(screen, BLACK, rect)
-            elif position in path_set:
-                pygame.draw.rect(screen, BLUE, rect)
-            elif position in visited_set:
-                pygame.draw.rect(screen, YELLOW, rect)
+            # Piirtojärjestys on tärkeä uudelleenreitityksen visualisoinnissa.
+            # Ensin piirretään perusympäristö, sitten haun ja reitin kerrokset,
+            # ja lopuksi lähtö, maali, tiesulut ja ajoneuvo päällimmäiseksi.
+            if grid.is_obstacle(row, col):
+                cell_color = BLACK
             else:
-                pygame.draw.rect(screen, WHITE, rect)
+                cell_color = WHITE
 
-            pygame.draw.rect(screen, LIGHT_GRAY, rect, 1)
+            if position in visited_set and not grid.is_obstacle(row, col):
+                cell_color = YELLOW
+
+            if position in travelled_path_set and not grid.is_obstacle(row, col):
+                cell_color = TRAVELLED_PATH_COLOR
+
+            if position in path_set and not grid.is_obstacle(row, col):
+                cell_color = BLUE
+
+            if position == grid.start:
+                cell_color = GREEN
+
+            if position == grid.goal:
+                cell_color = RED
+
+            if position in auto_obstacle_positions:
+                cell_color = AUTO_OBSTACLE_COLOR
+
+            if position == vehicle_position:
+                cell_color = ORANGE
+
+            pygame.draw.rect(screen, cell_color, rect)
+
+            # Ruudukkoviivoja ei piirretä rakennus-/korttelimassojen sisään,
+            # koska vaaleat saumat mustien ruutujen välissä tekevät kartasta
+            # levottoman ja vaikeasti katsottavan. Tiealueilla hienovarainen
+            # ruudukko jätetään näkyviin, jotta ruutupohjainen malli hahmottuu.
+            is_building_cell = grid.is_obstacle(row, col) and position not in auto_obstacle_positions
+            should_draw_grid_line = (
+                (DRAW_ROAD_GRID_LINES and not is_building_cell)
+                or (DRAW_BUILDING_GRID_LINES and is_building_cell)
+            )
+
+            if should_draw_grid_line:
+                pygame.draw.rect(screen, ROAD_GRID_LINE_COLOR, rect, 1)
 
     # Piirretään sivupaneelit, jos nappipaneeli annettu.
     if buttons is not None and font is not None:
@@ -507,13 +540,16 @@ def draw_grid(screen, grid, path=None, visited=None, vehicle_position=None, butt
         for b in buttons:
             b.draw(screen, font)
 
-def animate_search(screen, grid, visited_order, path, vehicle_position=None, buttons=None, font=None, selected_algorithm=None, placement_mode=None, auto_obstacle_count=0, auto_obstacle_positions=None):
+def animate_search(screen, grid, visited_order, path, travelled_path=None, vehicle_position=None, buttons=None, font=None, selected_algorithm=None, placement_mode=None, auto_obstacle_count=0, auto_obstacle_positions=None):
     """
     Näyttää algoritmin etenemisen vaiheittain.
 
     Varsinainen laskenta on tehty ennen tätä, joten animaation viive
     ei vaikuta mitattuun laskenta-aikaan.
     """
+    if travelled_path is None:
+        travelled_path = []
+
     if auto_obstacle_positions is None:
         auto_obstacle_positions = set()
 
@@ -532,6 +568,7 @@ def animate_search(screen, grid, visited_order, path, vehicle_position=None, but
             grid,
             path=[],
             visited=shown_visited,
+            travelled_path=travelled_path,
             vehicle_position=vehicle_position,
             buttons=buttons,
             font=font,
@@ -558,6 +595,7 @@ def animate_search(screen, grid, visited_order, path, vehicle_position=None, but
             grid,
             path=shown_path,
             visited=visited_order,
+            travelled_path=travelled_path,
             vehicle_position=vehicle_position,
             buttons=buttons,
             font=font,
@@ -819,6 +857,7 @@ def animate_vehicle_with_manual_obstacles(
             grid,
             path=current_path,
             visited=current_visited,
+            travelled_path=travelled_path,
             vehicle_position=vehicle_position,
             buttons=buttons,
             font=font,
@@ -873,6 +912,7 @@ def animate_vehicle_with_manual_obstacles(
                 grid,
                 current_visited,
                 current_path,
+                travelled_path=travelled_path,
                 vehicle_position=vehicle_position,
                 buttons=buttons,
                 font=font,
@@ -946,6 +986,7 @@ def animate_vehicle_with_manual_obstacles(
                             grid,
                             current_visited,
                             current_path,
+                            travelled_path=travelled_path,
                             vehicle_position=vehicle_position,
                             buttons=buttons,
                             font=font,
@@ -1042,6 +1083,7 @@ def animate_vehicle_with_dstar_lite(
             grid,
             path=current_path,
             visited=current_visited,
+            travelled_path=travelled_path,
             vehicle_position=vehicle_position,
             buttons=buttons,
             font=font,
@@ -1111,6 +1153,7 @@ def animate_vehicle_with_dstar_lite(
                 grid,
                 current_visited,
                 current_path,
+                travelled_path=travelled_path,
                 vehicle_position=vehicle_position,
                 buttons=buttons,
                 font=font,
@@ -1203,6 +1246,7 @@ def animate_vehicle_with_dstar_lite(
                             grid,
                             current_visited,
                             current_path,
+                            travelled_path=travelled_path,
                             vehicle_position=vehicle_position,
                             buttons=buttons,
                             font=font,
@@ -1240,11 +1284,34 @@ def animate_vehicle_with_dstar_lite(
 
     return current_path, current_visited, vehicle_position, auto_obstacle_positions
 
+def load_city_map_to_grid(grid, map_index):
+    """
+    Lataa valmiin kaupunkikartan indeksin perusteella.
+
+    Indeksi kiertää karttalistan ympäri, joten viimeisen kartan jälkeen
+    palataan ensimmäiseen karttaan.
+    """
+    city_map = get_city_map_by_index(map_index)
+    grid.load_city_map(city_map["name"])
+    return city_map
+
+
+def clear_visual_state():
+    """
+    Palauttaa reitin visualisointiin liittyvät muuttujat alkutilaan.
+
+    Tätä käytetään esimerkiksi silloin, kun kartta vaihtuu tai lähtö- tai
+    maalipiste muuttuu.
+    """
+    return [], [], None, None, set()
+
 def main():
     pygame.init()
 
     clock = pygame.time.Clock()
     grid = Grid()
+    current_map_index = 0
+    current_city_map = load_city_map_to_grid(grid, current_map_index)
 
     display_info = pygame.display.Info()
     screen_width = min(max(1100, display_info.current_w - 120), display_info.current_w)
@@ -1279,6 +1346,23 @@ def main():
     # S painetaan kerran -> seuraava klikkaus asettaa lähtöpisteen.
     # G painetaan kerran -> seuraava klikkaus asettaa kohdepisteen.
     placement_mode = None
+
+    print("Ohjelma käynnistyi kaupunkikarttatilassa.")
+    print(f"Ladattu kartta: {current_city_map['display_name']}")
+    print("Komennot:")
+    print("S = valitse lähtöpisteen asetus, sitten klikkaa tietä")
+    print("G = valitse kohdepisteen asetus, sitten klikkaa tietä")
+    print("Nuoli vasemmalle / oikealle = vaihda valmista kaupunkikarttaa")
+    print("Vasen veto = lisää tiesulkuja tieverkolle")
+    print("Oikea veto = poista käyttäjän lisäämiä tiesulkuja")
+    print("D = valitse Dijkstra")
+    print("A = valitse A*")
+    print("L = valitse D* Lite")
+    print("C = palauta nykyinen kartta lähtötilaan")
+    print("+ / - = muuta automaattisten ajonaikaisten tiesulkujen määrää algoritmin valinnan jälkeen (0-10)")
+    print("Välilyönti = suorita valittu algoritmi")
+    print("Enter = aloita ajo")
+    print("Ajon aikana vasen klikkaus = lisää dynaaminen tiesulku")
 
     running = True
 
@@ -1434,6 +1518,20 @@ def main():
                         auto_obstacle_count = min(AUTO_OBSTACLE_MAX, auto_obstacle_count + 1)
                         print(f"\nAutomaattisia ajonaikaisia esteitä: {auto_obstacle_count}")
 
+                elif event.key in (MAP_PREVIOUS_KEY, MAP_NEXT_KEY):
+                    if event.key == MAP_PREVIOUS_KEY:
+                        current_map_index -= 1
+                    else:
+                        current_map_index += 1
+
+                    current_city_map = load_city_map_to_grid(grid, current_map_index)
+                    placement_mode = None
+                    path, visited, vehicle_position, last_result, visible_auto_obstacle_positions = clear_visual_state()
+
+                    print(f"\nKartta vaihdettu: {current_city_map['display_name']}")
+                    print(f"Karttatyyppi: {current_city_map['category']}")
+                    print(f"Lähtöpiste: {grid.start}, maali: {grid.goal}")
+
                 elif event.key == pygame.K_s:
                     if grid.start is not None:
                         print("\nLähtöpiste on jo asetettu. Tyhjennä ruudukko, jos haluat aloittaa alusta.")
@@ -1500,32 +1598,17 @@ def main():
                     print("\nValittu algoritmi: D* Lite")
 
                 elif event.key == pygame.K_c:
-                    grid.clear()
-                    placement_mode = None
+                    if grid.is_city_map_loaded():
+                        grid.reset_to_base_map()
+                        print("\nNykyinen kaupunkikartta palautettu lähtötilaan.")
+                    else:
+                        grid.clear()
+                        print("\nRuudukko tyhjennetty.")
 
-                    path = []
-                    visited = []
-                    vehicle_position = None
-                    last_result = None
+                    placement_mode = None
+                    path, visited, vehicle_position, last_result, visible_auto_obstacle_positions = clear_visual_state()
                     selected_algorithm = None
                     auto_obstacle_count = 0
-                    visible_auto_obstacle_positions.clear()
-                    print("\nRuudukko tyhjennetty.")
-
-                elif event.key == pygame.K_p:
-                    if not can_edit_initial_obstacles(grid, selected_algorithm):
-                        print("\nSatunnaisesteet voi lisätä vasta lähtöpisteen ja maalin jälkeen, ennen algoritmin valintaa.")
-                        continue
-                    grid.generate_random_obstacles()
-                    placement_mode = None
-
-                    path = []
-                    visited = []
-                    vehicle_position = None
-                    last_result = None
-
-                    print("\nSatunnaiset esteet generoitu. Valitse seuraavaksi algoritmi.")
-                    print(f"Esteiden määrä: {len(grid.obstacles)}")
 
                 elif event.key == pygame.K_SPACE:
                     placement_mode = None
