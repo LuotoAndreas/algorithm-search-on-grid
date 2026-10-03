@@ -84,3 +84,29 @@ python summarize_results.py
 ## Huomio
 
 Ohjelma käyttää yksinkertaistettua ruudukkoympäristöä.
+
+## Final-v2-tutkimusputki
+
+Uusi tutkimusputki on erotettu vanhoista CSV-tiedostoista. Sen tutkimusjoukko on:
+
+> Initially reachable trips supporting five sequential route-disrupting but route-preserving cell closures.
+
+Ennen lopullista ajoa suoritetaan ajastamaton soveltuvuus- ja oikeellisuustarkistus:
+
+```bash
+python run_experiments_v2.py preflight --master-seed 20261003 --min-initial-distance 30 --base-scenarios-per-map 30 --candidate-limit 1000 --output preflight_report_final_v2.json
+```
+
+Preflightin täytyy löytää täsmälleen 30 perusskenaariota jokaiselle kymmenelle kartalle.
+Puuttuva kartta tai skenaario keskeyttää ajon; osittaista aineistoa ei hyväksytä.
+
+Lopullinen ajastettu ajo on erikseen suojattu `--enable-final-run`-valitsimella. Sitä ei
+saa käynnistää ennen hyväksyttyä preflightia ja erillistä lupaa. Uusi putki kirjoittaa
+vain `final_v2`-nimisiä aineistoja eikä korvaa vanhoja `experiment_results_final.csv`-
+tai `summary_final.csv`-tiedostoja.
+
+Automaattiset testit suoritetaan komennolla:
+
+```bash
+python -m unittest discover -s tests -v
+```

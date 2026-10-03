@@ -258,6 +258,13 @@ def build_cul_de_sac_suburb():
         add_vertical(roads, col, 8, 14)
         add_vertical(roads, col, 52, 56)
 
+    # Final-v2 topology revision: extend one existing suburban collector so
+    # that the right-side local branches have sparse alternate connections.
+    # This is a single vertical connector (column 42, rows 14..52). It keeps
+    # the numerous left/right dead ends and T-junctions, while adding enough
+    # limited redundancy for sequential route-preserving closures.
+    add_vertical(roads, 42, 14, 52)
+
     return make_map(
         name="cul_de_sac_suburb",
         display_name="T-risteykset ja umpikadut",
