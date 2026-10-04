@@ -1,0 +1,210 @@
+{
+  "experiment_version": "final-v2",
+  "report_type": "non_timed_feasibility_preflight",
+  "created_utc": "2026-10-03T14:51:23.964281+00:00",
+  "study_population": "Initially reachable trips supporting five sequential route-disrupting but route-preserving cell closures.",
+  "master_seed": 20261003,
+  "minimum_initial_distance": 30,
+  "target_base_scenarios_per_map": 30,
+  "full_timed_experiment_executed": false,
+  "maps": [
+    {
+      "map_index": 0,
+      "map_name": "grid_city",
+      "map_display_name": "Ruutukaavakaupunki",
+      "road_cell_count": 735,
+      "possible_ordered_pair_count": 539490,
+      "candidate_limit": 1000,
+      "candidate_attempts_tested": 1000,
+      "eligible_scenario_count": 654,
+      "selected_scenario_count": 30,
+      "attempts_required_for_30": 47,
+      "acceptance_rate": 0.654,
+      "comfortable": true,
+      "rejection_reasons": {
+        "distance_below_minimum": 343,
+        "event_5_no_route_preserving_candidate": 3
+      }
+    },
+    {
+      "map_index": 1,
+      "map_name": "ring_road_city",
+      "map_display_name": "Ruutukaava ja kehätie",
+      "road_cell_count": 647,
+      "possible_ordered_pair_count": 417962,
+      "candidate_limit": 1000,
+      "candidate_attempts_tested": 1000,
+      "eligible_scenario_count": 580,
+      "selected_scenario_count": 30,
+      "attempts_required_for_30": 41,
+      "acceptance_rate": 0.58,
+      "comfortable": true,
+      "rejection_reasons": {
+        "distance_below_minimum": 418,
+        "event_5_no_route_preserving_candidate": 2
+      }
+    },
+    {
+      "map_index": 2,
+      "map_name": "dense_downtown",
+      "map_display_name": "Tiheä keskusta",
+      "road_cell_count": 1127,
+      "possible_ordered_pair_count": 1269002,
+      "candidate_limit": 1000,
+      "candidate_attempts_tested": 1000,
+      "eligible_scenario_count": 634,
+      "selected_scenario_count": 30,
+      "attempts_required_for_30": 45,
+      "acceptance_rate": 0.634,
+      "comfortable": true,
+      "rejection_reasons": {
+        "distance_below_minimum": 366
+      }
+    },
+    {
+      "map_index": 3,
+      "map_name": "sparse_suburb",
+      "map_display_name": "Harva esikaupunki",
+      "road_cell_count": 473,
+      "possible_ordered_pair_count": 223256,
+      "candidate_limit": 1000,
+      "candidate_attempts_tested": 1000,
+      "eligible_scenario_count": 638,
+      "selected_scenario_count": 30,
+      "attempts_required_for_30": 41,
+      "acceptance_rate": 0.638,
+      "comfortable": true,
+      "rejection_reasons": {
+        "distance_below_minimum": 360,
+        "event_5_no_route_preserving_candidate": 2
+      }
+    },
+    {
+      "map_index": 4,
+      "map_name": "bottleneck_city",
+      "map_display_name": "Pullonkaulakaupunki",
+      "road_cell_count": 598,
+      "possible_ordered_pair_count": 357006,
+      "candidate_limit": 1000,
+      "candidate_attempts_tested": 1000,
+      "eligible_scenario_count": 644,
+      "selected_scenario_count": 30,
+      "attempts_required_for_30": 40,
+      "acceptance_rate": 0.644,
+      "comfortable": true,
+      "rejection_reasons": {
+        "distance_below_minimum": 345,
+        "event_5_no_route_preserving_candidate": 11
+      }
+    },
+    {
+      "map_index": 5,
+      "map_name": "bridge_city",
+      "map_display_name": "Silta ja varayhteys",
+      "road_cell_count": 468,
+      "possible_ordered_pair_count": 218556,
+      "candidate_limit": 1000,
+      "candidate_attempts_tested": 1000,
+      "eligible_scenario_count": 598,
+      "selected_scenario_count": 30,
+      "attempts_required_for_30": 46,
+      "acceptance_rate": 0.598,
+      "comfortable": true,
+      "rejection_reasons": {
+        "distance_below_minimum": 386,
+        "event_5_no_route_preserving_candidate": 16
+      }
+    },
+    {
+      "map_index": 6,
+      "map_name": "cul_de_sac_suburb",
+      "map_display_name": "T-risteykset ja umpikadut",
+      "road_cell_count": 476,
+      "possible_ordered_pair_count": 226100,
+      "candidate_limit": 1000,
+      "candidate_attempts_tested": 1000,
+      "eligible_scenario_count": 441,
+      "selected_scenario_count": 30,
+      "attempts_required_for_30": 70,
+      "acceptance_rate": 0.441,
+      "comfortable": true,
+      "rejection_reasons": {
+        "distance_below_minimum": 433,
+        "event_2_no_route_preserving_candidate": 2,
+        "event_3_no_route_preserving_candidate": 11,
+        "event_4_no_route_preserving_candidate": 38,
+        "event_5_no_route_preserving_candidate": 75
+      }
+    },
+    {
+      "map_index": 7,
+      "map_name": "roundabout_city",
+      "map_display_name": "Liikenneympyräkaupunki",
+      "road_cell_count": 506,
+      "possible_ordered_pair_count": 255530,
+      "candidate_limit": 1000,
+      "candidate_attempts_tested": 1000,
+      "eligible_scenario_count": 637,
+      "selected_scenario_count": 30,
+      "attempts_required_for_30": 52,
+      "acceptance_rate": 0.637,
+      "comfortable": true,
+      "rejection_reasons": {
+        "distance_below_minimum": 363
+      }
+    },
+    {
+      "map_index": 8,
+      "map_name": "mixed_city",
+      "map_display_name": "Sekaverkko",
+      "road_cell_count": 565,
+      "possible_ordered_pair_count": 318660,
+      "candidate_limit": 1000,
+      "candidate_attempts_tested": 1000,
+      "eligible_scenario_count": 486,
+      "selected_scenario_count": 30,
+      "attempts_required_for_30": 56,
+      "acceptance_rate": 0.486,
+      "comfortable": true,
+      "rejection_reasons": {
+        "distance_below_minimum": 369,
+        "event_2_no_route_preserving_candidate": 1,
+        "event_3_no_route_preserving_candidate": 18,
+        "event_4_no_route_preserving_candidate": 97,
+        "event_5_no_route_preserving_candidate": 29
+      }
+    },
+    {
+      "map_index": 9,
+      "map_name": "multi_district_city",
+      "map_display_name": "Monikeskuksinen kaupunki",
+      "road_cell_count": 395,
+      "possible_ordered_pair_count": 155630,
+      "candidate_limit": 1000,
+      "candidate_attempts_tested": 1000,
+      "eligible_scenario_count": 150,
+      "selected_scenario_count": 30,
+      "attempts_required_for_30": 184,
+      "acceptance_rate": 0.15,
+      "comfortable": true,
+      "rejection_reasons": {
+        "distance_below_minimum": 351,
+        "event_1_no_route_preserving_candidate": 6,
+        "event_3_no_route_preserving_candidate": 31,
+        "event_4_no_route_preserving_candidate": 52,
+        "event_5_no_route_preserving_candidate": 410
+      }
+    }
+  ],
+  "validation": {
+    "scenarios_validated": 300,
+    "graph_states_validated": 1800,
+    "paths_validated": 5400,
+    "dijkstra_oracle_matches": 1800,
+    "astar_oracle_matches": 1800,
+    "dstar_oracle_matches": 1800,
+    "identical_state_checks": 1800
+  },
+  "git_commit": "b75cf7f9a12cd887be6669993395fd6e2086920c",
+  "git_dirty": true
+}
